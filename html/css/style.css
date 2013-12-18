@@ -1,0 +1,29 @@
+#container {
+	width: 85vw;
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: 0;
+	left: 0;
+	margin: auto;
+	text-align: center;
+	display: inline-block;
+}
+#select_route {
+	margin: auto;
+}
+#map_canvas {
+	display: inline-block;
+	width: 75%;
+	height: 80%;
+}
+#info_content {
+	font-family: sans-serif;
+	text-align: justify;
+	padding: 5px;
+	display: block;
+}
+h4 {
+	margin: auto;
+	padding: 3px;
+}

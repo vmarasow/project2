@@ -10,69 +10,191 @@ Project 2 sampling by Alain Ibrahim
     <style type="text/css">
       html { height: 100% }
       body { height: 100%; margin: 0; padding: 0 }
-      #map_canvas { height: 100% }
       
       #select_route {width:20%;height:200px;}
     </style>
+    <link rel="stylesheet" type="text/css" href="css/style.css">
     <script type="text/javascript"
       src="http://maps.googleapis.com/maps/api/js?sensor=false">
+    </script>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js" type="text/javascript">
     </script>
     <script type="text/javascript">
     var map = "";
     var marker = "";
+    var polyline = null;
+    var colors = {};
+    var markerArray = [];
+
 
       function initialize() {
         
         var mapOptions = {
           center: new google.maps.LatLng(37.775362, -122.417564),
-          zoom: 12,
+          zoom: 11,
           mapTypeId: google.maps.MapTypeId.ROADMAP
         };
             map = new google.maps.Map(document.getElementById("map_canvas"),
             mapOptions);
       }
       
-      function addMarker() {
-              marker = new google.maps.Marker({
-              position: new google.maps.LatLng(37.775362, -122.417564),
-              title: "I am a marker!"
+    var addMarkers = function(coords, name) {
+      for (var i = 0; i < coords.length; i++) {
+        marker = new google.maps.Marker({
+          position: coords[i],
+          title: name[i].abbr + ' -- ' + name[i].name,
+          map: map
+        });
+        if (i + 1 == coords.length) {
+          var dest = name[i].abbr;
+        }
+        var infowindow = new google.maps.InfoWindow({
+          position: coords[i], 
+        });
+        markerArray.push(marker);
+        (function (marker) {
+          google.maps.event.addListener(marker, 'click', function() {
+            // need to send ajax to server to get data from realtime api for the time of the next train
+            var abbr = marker.title.match(/[A-Z0-9]+/); 
+            var str = '';
+            $.ajax({
+              url: 'model.php',
+              type: 'GET',
+              async: false,
+              data: {dest: dest, station: abbr[0], get_etd: true},
+              dataType: 'json',
+              success: function(response){
+                // parse the json and put the results in the infoWindow's setContent method.
+                for (var i = 0; i < response.estimate.length; i++) {
+
+                  str += 'Train departing in - '+response.estimate[i].minutes+
+                  ' minutes, at platform - '+response.estimate[i].platform+'.<br/ > ';
+                }
+                var content = '<h3>Station - '+abbr[0]+'</h3> '+
+                '<h4>Direction - '+dest+'</h4> '+
+                '<div id="info_content">'+str+'</div> ';
+                infowindow.setContent(content);
+              }
+            });
+            infowindow.open(map,marker);
           });
-          
-          marker.setMap(map);
+        }(marker));
+        marker.setMap(map);
+        
+      }
+    }
+    /*var addInfoWindow = function(map) {
+      for (var i = 0; i < markerArray.length; i++) {
+
       }
       
-      function addPolyline() {
-          var polylineCoordinates = [
-            new google.maps.LatLng(37.775362, -122.417564),
-            new google.maps.LatLng(37.7849, -122.4522),
-            new google.maps.LatLng(37.7805, -122.4725),
-            ];
-            
-          var polylinePath = new google.maps.Polyline({
-            path: polylineCoordinates,
-            strokeColor: "#FF0000",
-            strokeOpacity: 1.0,
-            strokeWeight: 2
-        }); 
-        
-        polylinePath.setMap(map);
+    }*/
+
+    var clearMarkers = function () {
+      for (var i = 0; i < markerArray.length; i++) {
+        markerArray[i].setMap(null);
+      }
+    }
+      
+    var addPolyline = function(polylineCoordinates, color) {
+      polylinePath = new google.maps.Polyline({
+        path: polylineCoordinates,
+        strokeColor: color,
+        strokeOpacity: 1.0,
+        strokeWeight: 3
+      });
+      // remove the first polyline
+      var old = polyline;
+      if (old) {
+        old.setMap(null);
+      }
+      // set the polyline to the map
+      polylinePath.setMap(map);
+      polyline = polylinePath;
     }
     
-    function addInfoWindow() {
-        var infowindow = new google.maps.InfoWindow({
-        content: "<h1 style='color:blue'>I am an info window!</h1>",
-        position: new google.maps.LatLng(37.7805, -122.4725), 
-        });
-        
-        google.maps.event.addListener(marker, 'click', function() {
-        infowindow.open(map,marker);
-        });
+
+    var getNames = function(line) {
+      var names = [];
+      $.ajax({
+        type: 'GET',
+        url: 'model.php',
+        data: { line: line, get_names: true},
+        dataType: 'json',
+        async: false,
+        success: function (response){
+          for(var i = 0; i < response.length; i++) {
+            names[i] = {name: response[i].name, abbr: response[i].abbr};
+          }
+        }
+      });
+      return names;
     }
-  
+
+    var getPolyline = function(line) {
+      // send AJAX to get the coords from the model
+      var polylineCoords = [];
+      $.ajax({
+        type: 'GET',
+        url: 'model.php',
+        data: { line: line, get_route: true},
+        dataType: 'json',
+        async: false,
+        success: function (response){
+          for(var i = 0; i < response.length; i++) {
+            polylineCoords[i] = new google.maps.LatLng(response[i].lat, response[i].lng);
+          }
+        }
+      });
+      return polylineCoords;
+    }
+
+    $(document).ready(function(){
+      initialize();
+      var list = document.getElementById('selectNumber');
+      $.ajax({
+        type: 'POST',
+        url: 'model.php',
+        data: { get_colors: true },
+        dataType: 'json',
+        success: function (response) {
+          for (var i = 0; i < response.length; i++) {
+            var el = document.createElement('option');
+            el.textContent = response[i].num + ': ' + response[i].abbr;
+            el.value = response[i].num;
+            el.style.background = response[i].color;
+            list.appendChild(el);
+            colors[response[i].num] = response[i].color;
+          };
+        }
+      });
+    });
+
+    var getLine = function() {
+      var line = document.getElementById('selectNumber').value;
+      return line;
+    }
+
+    var fillMap = function() {
+      var line, coords, names, marked;
+      line = getLine();
+      coords = getPolyline(line);
+      addPolyline(coords, colors[line]);
+      names = getNames(line);
+      clearMarkers();
+      addMarkers(coords, names);
+    }
 
     </script>
   </head>
-  <body onload="initialize();addPolyline();addMarker();addInfoWindow();">
-    <div id="map_canvas" style="width:60%; height:80%"></div>
+  <body >
+    <div id="container">
+    <div id="map_canvas" style="width:75%; height:80%;"></div>
+    <div id="select_route">
+      <select id="selectNumber" onchange="fillMap();">
+        <option disabled selected style="display:block;">Choose a line</option>
+      </select>
+    </div>
+  </div>
   </body>
 </html>
